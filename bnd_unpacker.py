@@ -76,9 +76,9 @@ def unpack_bnd(content, basepath, n_basepath):
     
     # Skip the version number.
     master_offset = 0x0c
-    (magic_flag, num_of_records, filename_end_offset) = struct.unpack_from("<III", content, offset=master_offset)
-    master_offset += struct.calcsize("<III")
-    if not (magic_flag == 0x74 or magic_flag == 0x54 or magic_flag == 0x70):
+    (magic_flag, num_of_records, filename_end_offset) = struct.unpack_from(">III", content, offset=master_offset)
+    master_offset += struct.calcsize(">III")
+    if not (magic_flag == 0x2E010100 or magic_flag == 0x26010100 or magic_flag == 0x0E010100):
         raise ValueError("File has unknown BND3 magic flag: " + hex(magic_flag))
     
     # Skip to the records.
@@ -86,24 +86,26 @@ def unpack_bnd(content, basepath, n_basepath):
     
     count = 0
     for _ in xrange(num_of_records):
-        if magic_flag == 0x74 or magic_flag == 0x54:
+        if magic_flag == 0x2E010100 or magic_flag == 0x26010100:
             (record_sep, filedata_size, filedata_offset, file_id, 
-             filename_offset, dummy_filedata_size) = struct.unpack_from("<IIIIII", content, offset=master_offset)
-            master_offset += struct.calcsize("<IIIIII")
+             filename_offset, dummy_filedata_size) = struct.unpack_from(">IIIIII", content, offset=master_offset)
+            master_offset += struct.calcsize(">IIIIII")
             if filedata_size != dummy_filedata_size:
                 raise ValueError("File has malformed record structure. File data size " + 
                  str(filedata_size) + " does not match dummy file data size " + 
                  str(dummy_filedata_size) + ".")
-        else: # magic_flag == 0x70
+        else: # magic_flag == 0x0E010100
             (record_sep, filedata_size, filedata_offset, file_id, 
-             filename_offset) = struct.unpack_from("<IIIII", content, offset=master_offset)
-            master_offset += struct.calcsize("<IIIII")
+             filename_offset) = struct.unpack_from(">IIIII", content, offset=master_offset)
+            master_offset += struct.calcsize(">IIIII")
         
-        if record_sep != 0x40:
+        if record_sep != 0x02000000:
             raise ValueError("File has malformed record structure. Record" + 
             " has unknown record separator " + hex(record_sep))
             
-        filename = extract_strz(content, filename_offset).replace('\\', '/')
+        filename = extract_strz(content, filename_offset)
+        filename = filename.decode("cp932", errors="replace")
+        filename = filename.replace('\\', '/')
         filedata = content[filedata_offset:filedata_offset + filedata_size]
         filename_to_use = relativize_filename(filename, basepath, n_basepath)
             
@@ -119,13 +121,13 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print "Usage: " + str(sys.argv[0]) + " <BND3 File>"
     else:
-        filepath = sys.argv[1]
-        (directory, filename) = os.path.split(os.path.abspath(filepath))
-        with open(filepath, 'rb') as f:
-            file_content = f.read()
-            file_list = unpack_bnd(file_content, 
-             os.path.join(directory, filename + '.extract'), 
-             os.path.join(directory, filename + '.n_extract'), filename)
-        print "  - Created file list:"
-        for filename in file_list:
-            print "  - " + str(filename)
+        for filepath in sys.argv[1:]:
+            (directory, filename) = os.path.split(os.path.abspath(filepath))
+            with open(filepath, 'rb') as f:
+                file_content = f.read()
+                file_list = unpack_bnd(file_content, 
+                 os.path.join(directory, filename + '.extract'), 
+                 os.path.join(directory, filename + '.n_extract'))
+            #print "  - Created file list:"
+            #for filename in file_list:
+            #    print "  - " + str(filename)

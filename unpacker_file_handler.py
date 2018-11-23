@@ -9,7 +9,6 @@ import mmap
 
 import bdt_unpacker
 import bnd_unpacker
-import c4110_replacement
 
 UNPACKED_DIRS = [
     "chr", "event", "facegen", "font", "map", "menu", "msg", "mtd", 
@@ -258,15 +257,14 @@ def unpack_archives():
      "file should be modified.\n\n\nMANIFEST:\n\n"
          
     created_file_list = []
-    for i in [0, 1, 2, 3]:
-        header_file = "dvdbnd" + str(i) + ".bhd5"
-        data_file = "dvdbnd" + str(i) + ".bdt"
-        
-        print " - Unpacking archive " + str(data_file) + " using header " + str(header_file)
-        log.info("Unpack " + str(data_file) + " via " + str(header_file))
-        new_files = bdt_unpacker.unpack_archive(header_file, data_file, os.getcwd())
-        log.info(" Unpacking yielded " + str(len(new_files)) + " new files.")
-        created_file_list += new_files
+    header_file = "dvdbnd.bhd5"
+    data_file = "dvdbnd.bdt"
+    
+    print " - Unpacking archive " + str(data_file) + " using header " + str(header_file)
+    log.info("Unpack " + str(data_file) + " via " + str(header_file))
+    new_files = bdt_unpacker.unpack_archive(header_file, data_file, os.getcwd())
+    log.info(" Unpacking yielded " + str(len(new_files)) + " new files.")
+    created_file_list += new_files
         
     # Convert to set and back to remove duplicates.
     created_file_list = list(set(created_file_list))
@@ -304,25 +302,11 @@ def unpack_archives():
         sys.stdout.flush()
     print "Done."
     
-    print " - Writing custom copy of missing file(s)...",
-    log.info("Write reconstructed file(s).")
-    manifest_string_list.append("-- Custom --")
-    filepath = c4110_replacement.PATH.replace('\\', '/')
-    filepath_to_use = bnd_unpacker.relativize_filename(filepath, 
-     os.getcwd(), os.path.join(os.getcwd(), TEMP_FRPG_DIR, TEMP_FRPG_N_SUBDIR))
-    f = bnd_unpacker.create_file(filepath_to_use)
-    f.write(c4110_replacement.DATA)
-    f.close()
-    created_file_list.append(filepath_to_use)
-    new_file_rel = os.path.relpath(filepath_to_use, os.path.join(os.getcwd(), TEMP_FRPG_DIR))
-    manifest_string_list.append(" " + new_file_rel)
-    print "Done."
-    
-    # Write out manifest, now that all *bnd-related files have been unpacked / created.
+    # Write out manifest, now that all *bnd-related files have been unpacked / cre>
     log.info("Write manifest.")
     with open(os.path.join(os.getcwd(), TEMP_FRPG_DIR, BND_MANIFEST_FILE), 'w') as g:
         g.write(BND_MANIFEST_HEADER)
-        g.write('\n'.join(manifest_string_list))
+        g.write('\n'.join(manifest_string_list).encode("UTF-8"))
         g.close()
     
     log.info("Build bdt/bhd pairing.")
@@ -599,3 +583,8 @@ def attempt_unpack():
     wait_before_exit(0)
 
     return
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
+    create_unpacked_dirs()
+    unpack_archives()

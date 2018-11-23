@@ -81,8 +81,8 @@ def parse_bhd_header_to_dict(header):
     
     # Skip the version number.
     master_offset = 0x0c
-    (magic_flag, num_of_records) = struct.unpack_from("<II", content, offset=master_offset)
-    master_offset += struct.calcsize("<II")
+    (magic_flag, num_of_records) = struct.unpack_from(">II", content, offset=master_offset)
+    master_offset += struct.calcsize(">II")
     if not (magic_flag != 0x74 or magic_flag != 0x54):
         raise ValueError("File has unknown BHD3 magic flag: " + hex(magic_flag))
     
@@ -91,13 +91,13 @@ def parse_bhd_header_to_dict(header):
     
     for _ in xrange(num_of_records):
         (record_sep, filedata_size, filedata_offset, file_id, 
-         filename_offset, dummy_filedata_size) = struct.unpack_from("<IIIIII", content, offset=master_offset)
-        master_offset += struct.calcsize("<IIIIII")
+         filename_offset, dummy_filedata_size) = struct.unpack_from(">IIIIII", content, offset=master_offset)
+        master_offset += struct.calcsize(">IIIIII")
         if filedata_size != dummy_filedata_size:
             raise ValueError("File has malformed record structure. File data size " + 
              str(filedata_size) + " does not match dummy file data size " + 
              str(dummy_filedata_size) + ".")
-        if record_sep != 0x40:
+        if record_sep != 0x02000000:
             raise ValueError("File has malformed record structure. Record" + 
             " has unknown record separator " + hex(record_sep))
             
@@ -131,28 +131,28 @@ def parse_bhd5_header_to_dict(header):
     master_offset = consume_byte(header_str, master_offset, 'H', 1)
     master_offset = consume_byte(header_str, master_offset, 'D', 1)
     master_offset = consume_byte(header_str, master_offset, '5', 1)
-    master_offset = consume_byte(header_str, master_offset, '\xff', 1)
+    master_offset = consume_byte(header_str, master_offset, '\x00', 4)
     master_offset = consume_byte(header_str, master_offset, '\x00', 3)
     master_offset = consume_byte(header_str, master_offset, '\x01', 1)
-    master_offset = consume_byte(header_str, master_offset, '\x00', 3)
     
-    (file_size,) = struct.unpack_from("<I", header_str, offset=master_offset)
-    master_offset += struct.calcsize("<I")
-    (bin_count, bin_offset) = struct.unpack_from("<II", header_str, offset=master_offset)
-    master_offset += struct.calcsize("<II")
+    (file_size,) = struct.unpack_from(">I", header_str, offset=master_offset)
+    master_offset += struct.calcsize(">I")
+    (bin_count, bin_offset) = struct.unpack_from(">II", header_str, offset=master_offset)
+    master_offset += struct.calcsize(">II")
             
     for _ in xrange(bin_count):
-        (bin_record_count, bin_record_offset) = struct.unpack_from("<II", header_str, offset=master_offset)
-        master_offset += struct.calcsize("<II")
+        (bin_record_count, bin_record_offset) = struct.unpack_from(">II", header_str, offset=master_offset)
+        master_offset += struct.calcsize(">II")
         for _ in xrange(bin_record_count):
-            (record_hash, record_size, record_offset, zero) = struct.unpack_from("<IIII", header_str, offset=bin_record_offset)
-            bin_record_offset += struct.calcsize("<IIII")
+            (record_hash, record_size, zero, record_offset) = struct.unpack_from(">IIII", header_str, offset=bin_record_offset)
+            bin_record_offset += struct.calcsize(">IIII")
             if zero != 0:
                 raise ValueError("Required record terminator is non-zero. Actual value is " + str(zero) + ".")
             try:
                 name = name_hash_dict[record_hash]
             except KeyError:
-                raise ValueError("Name hash " + hex(name_hash) + " was not found in the name hash dictionary.")
+                #raise ValueError("Name hash " + hex(record_hash) + " was not found in the name hash dictionary.")
+                name = "0x" + format(record_hash, "08X") + ".bin"
             return_dict[name] = (record_offset, record_size)
     return return_dict
 
@@ -185,12 +185,19 @@ def unpack_archive(header, data, basepath):
             raise ValueError("Header of data file is missing. Data file is possibly corrupt or malformed.")
         
         count = 0
-        for name in file_dict:
+        for name in file_dict.keys():
             (record_offset, record_size) = file_dict[name]            
             d.seek(record_offset)
             content = d.read(record_size)
             if dcx_uncompresser.appears_dcx(content):
-                content = dcx_uncompresser.uncompress_dcx_content(content)
+                try:
+                    content = dcx_uncompresser.uncompress_dcx_content(content)
+                except (ValueError, AssertionError) as e:
+                    print
+                    print "DCX", name
+                    with open("tmp.dcx", "wb") as f:
+                        f.write(content)
+                    raise
                 if name[-4:] == ".dcx":
                     name = name[:-4]
             filename = fix_filename(basepath, name)
